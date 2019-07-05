@@ -32,6 +32,7 @@ const Group = require('./models/group');
 const utils = require("./utils");
 const Filter = require("./filter");
 const EventTimeline = require("./models/event-timeline");
+const EventStatus = require("./models/event").EventStatus;
 
 import {InvalidStoreError} from './errors';
 
@@ -808,6 +809,26 @@ SyncApi.prototype._sync = async function(syncOptions) {
 
         // tell databases that everything is now in a consistent state and can be saved.
         client.store.save();
+    }
+
+    //Sent all offline messages    
+    try{
+        const keys = Object.keys(this.client.store.rooms);
+        const client = this.client;
+        keys.forEach(key => {
+            const room = this.client.store.rooms[key];
+            room.getPendingEvents().filter(function(ev) {
+                return ev.status === EventStatus.NOT_SENT;
+            }).forEach(function(event) {
+                client.resendEvent(event, room).done(function(res) {
+                    console.trace('Resend success', res);
+                }, function(err) {
+                    console.log('Resend got send failure: ' + err.name + '('+err+')');
+                });
+            });
+        });
+    }catch(e){
+        console.error('Failed to sent offline messages', e);
     }
 
     // Begin next sync
